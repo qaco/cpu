@@ -1,4 +1,4 @@
-from random import randrange
+from random import randrange,sample
 
 class Muop:
 
@@ -35,10 +35,19 @@ class Muop:
 
 class MuopFactory:
 
-    def __init__(self,ports):
+    def __init__(self,ports,max_ports_per_op=2):
+        assert(max_ports_per_op > 1)
+        assert(len(ports) > 1)
+        assert(len(ports) >= max_ports_per_op)
         self.ports = ports
         self.history = []
         self.stamp = 0
+        self.max_ports_per_op = max_ports_per_op
+
+    def dice(self):
+        nports = randrange(1,self.max_ports_per_op)
+        disjunction = sample(self.ports,nports)
+        return disjunction
 
     def build(self,max_deps=0):
         assert(self.ports)
@@ -51,7 +60,7 @@ class MuopFactory:
                 for i in range(ndeps)]
         muop = Muop(
             name=f"u{self.stamp}",
-            ports=self.ports.copy(),
+            ports=self.dice(),
             deps=deps
         )
         self.stamp += 1
@@ -180,9 +189,9 @@ class CPU:
                 offset = max(noffset,offset)
                 self.rob.rotate()
             # Insert a new muop
+            self.rob.insert(nop)
             nop.timestamp = max(self.backend.first_slot_free(nop),
                                 offset)
-            self.rob.insert(nop)
             # Out if stop conditions are met
             flag = (self.backend.is_stalling(nop) and
                     self.backend.is_majority(nop.port))
