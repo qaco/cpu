@@ -53,7 +53,6 @@ class Backend:
             self.throughputs[c] = default_throughput
 
     def clear(self):
-        self.history = []
         self.last_ts = {}
         self.card_ports = {}
         for c in self.throughputs:
@@ -70,7 +69,6 @@ class Backend:
     def issue(self,nop):
         self.last_ts[nop.port] = nop.timestamp
         self.card_ports[nop.port] += 1
-        self.history.append(nop)
 
     def is_stalling(self,nop):
         if nop.port in self.last_ts:
@@ -93,12 +91,6 @@ class Backend:
         else:
             slot = 0
         return slot
-
-    def str_of_history(self):
-        res = ""
-        for m in self.history:
-            res += str(m) + " "
-        return res
         
 class ROB:
 
@@ -107,6 +99,7 @@ class ROB:
         self.clear()
 
     def clear(self):
+        self.history = []
         self.buff = []
 
     def full(self):
@@ -130,6 +123,13 @@ class ROB:
     def insert(self,nop):
         assert(len(self.buff) < self.size)
         self.buff.append(nop)
+        self.history.append(nop)
+
+    def str_of_history(self):
+        res = ""
+        for m in self.history:
+            res += str(m) + " "
+        return res
     
 class CPU:
 
@@ -160,15 +160,15 @@ class CPU:
                 offset = max(noffset,offset)
                 self.rob.rotate()
             # Insert a new muop
-            self.rob.insert(nop)
             nop.timestamp = max(self.backend.first_slot_free(nop),
                                 offset)
-            # Post-processing (!! the order matters)
+            self.rob.insert(nop)
+            # Out if stop conditions are met
             flag = (self.backend.is_stalling(nop) and
                     self.backend.is_majority(nop.port))
-            self.backend.issue(nop)
-            # Out if stop conditions are met
             if flag and stop_if_flag:
                 break
+            # Post-processing
+            self.backend.issue(nop)
 
         return flag

@@ -29,15 +29,15 @@ def __main__():
         
         if found:
 
-            nom_str_of_history = cpu.backend.str_of_history()
+            nom_str_of_history = cpu.rob.str_of_history()
             m = cpu.rob.tail()
             
-            stream2 = [m.clone() for m in cpu.backend.history]
+            stream2 = [m.clone() for m in cpu.rob.history]
             backend.accelerate(m.port)
             cpu.simulate(stream2,stop_if_flag=False)
             backend.slowdown(m.port)
             
-            acc_str_of_history = cpu.backend.str_of_history()
+            acc_str_of_history = cpu.rob.str_of_history()
             m2 = cpu.rob.tail()
 
             if m.timestamp == m2.timestamp:
