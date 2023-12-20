@@ -1,4 +1,4 @@
-from cpu import Backend, ROB, CPU, MuopFactory
+from cpu import Backend, ROB, CPU, MuopFactory, Renamer
 
 def __main__():
 
@@ -10,13 +10,14 @@ def __main__():
     default_throughput = 1.0
 
     # Construction
-    
+
+    renamer = Renamer()
     backend = Backend(
         ports=ports,
         default_throughput=default_throughput
     )
     rob = ROB(size=rob_size)
-    cpu = CPU(backend=backend,rob=rob)
+    cpu = CPU(backend=backend,rob=rob,renamer=renamer)
 
     # Computation
     
@@ -24,7 +25,7 @@ def __main__():
 
         factory = MuopFactory(ports=ports)
         
-        stream = [factory.random() for x in range(stream_size)]
+        stream = [factory.build() for x in range(stream_size)]
         found = cpu.simulate(stream, stop_if_flag=True)
         
         if found:

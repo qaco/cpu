@@ -2,23 +2,33 @@ from random import randrange
 
 class Muop:
 
-    def __init__(self,name,port,deps):
+    def __init__(self,name,ports,deps):
         self.name = name
-        self.port = port
+        self.ports = ports
+        self.port = None
         self.deps = deps
         self.timestamp = None
 
     def clone(self):
         m = Muop(
             name=self.name,
-            port=self.port,
+            ports=self.ports,
             deps=self.deps
         )
         return m
         
     def __str__(self):
         res = self.name
-        res += f"[{self.port}]"
+        res += "["
+        if self.port is not None:
+            res += self.port
+        elif self.ports:
+            res += self.ports[0]
+            for p in self.ports[1:]:
+                res += "|" + p
+        else:
+            assert(False)
+        res += "]"
         if self.timestamp is not None:
             res += f"({self.timestamp})"
         return res
@@ -30,9 +40,8 @@ class MuopFactory:
         self.history = []
         self.stamp = 0
 
-    def random(self,max_deps=0):
+    def build(self,max_deps=0):
         assert(self.ports)
-        res = self.ports[randrange(0,len(self.ports))]
         
         if self.history:
             ndeps = randrange(0,max_deps + 1)
@@ -40,11 +49,20 @@ class MuopFactory:
             ndeps = 0
         deps = [self.history[randrange(0,len(self.history))]
                 for i in range(ndeps)]
-        muop = Muop(name=f"u{self.stamp}",port=res,deps=deps)
+        muop = Muop(
+            name=f"u{self.stamp}",
+            ports=self.ports.copy(),
+            deps=deps
+        )
         self.stamp += 1
         self.history.append(muop)
         return muop
 
+class Renamer:
+
+    def map(self,nop):
+        nop.port = nop.ports[randrange(0,len(nop.ports))]
+    
 class Backend:
 
     def __init__(self, ports, default_throughput=1.0):
@@ -133,7 +151,8 @@ class ROB:
     
 class CPU:
 
-    def __init__(self,backend,rob):
+    def __init__(self,renamer,backend,rob):
+        self.renamer = renamer
         self.backend = backend
         self.rob = rob
         self.clear()
@@ -152,6 +171,7 @@ class CPU:
         flag = False
         
         for nop in stream:
+            self.renamer.map(nop)
             # Retire the oldest muop
             if self.rob.full():
                 oop = self.rob.head()
