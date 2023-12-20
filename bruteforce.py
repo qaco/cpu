@@ -8,14 +8,15 @@ def __main__():
     rob_size = 3
     stream_size = 8
     default_throughput = 1.0
+    max_ports_per_op = 2
 
     # Construction
 
-    renamer = Renamer()
     backend = Backend(
         ports=ports,
         default_throughput=default_throughput
     )
+    renamer = Renamer(backend=backend)
     rob = ROB(size=rob_size)
     cpu = CPU(backend=backend,rob=rob,renamer=renamer)
 
@@ -23,7 +24,10 @@ def __main__():
     
     while True:
 
-        factory = MuopFactory(ports=ports)
+        factory = MuopFactory(
+            ports=ports,
+            max_ports_per_op=max_ports_per_op
+        )
         
         stream = [factory.build() for x in range(stream_size)]
         found = cpu.simulate(stream, stop_if_flag=True)

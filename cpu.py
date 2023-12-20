@@ -1,4 +1,4 @@
-from random import randrange,sample
+from random import randrange,sample,choice
 
 class Muop:
 
@@ -35,14 +35,12 @@ class Muop:
 
 class MuopFactory:
 
-    def __init__(self,ports,max_ports_per_op=2):
-        assert(max_ports_per_op > 1)
-        assert(len(ports) > 1)
-        assert(len(ports) >= max_ports_per_op)
+    def __init__(self,ports,max_ports_per_op):
+        assert(max_ports_per_op > 1 and len(ports) >= max_ports_per_op)
         self.ports = ports
+        self.max_ports_per_op = max_ports_per_op
         self.history = []
         self.stamp = 0
-        self.max_ports_per_op = max_ports_per_op
 
     def dice(self):
         nports = randrange(1,self.max_ports_per_op)
@@ -56,8 +54,7 @@ class MuopFactory:
             ndeps = randrange(0,max_deps + 1)
         else:
             ndeps = 0
-        deps = [self.history[randrange(0,len(self.history))]
-                for i in range(ndeps)]
+        deps = [choice(self.history) for i in range(ndeps)]
         muop = Muop(
             name=f"u{self.stamp}",
             ports=self.dice(),
@@ -69,9 +66,15 @@ class MuopFactory:
 
 class Renamer:
 
-    def map(self,nop):
-        nop.port = nop.ports[randrange(0,len(nop.ports))]
+    def __init__(self,backend):
+        self.backend = backend
     
+    def randomly_map(self,nop):
+        nop.port = choice(nop.ports)
+
+    def map(self,nop):
+        assert(False)
+        
 class Backend:
 
     def __init__(self, ports, default_throughput=1.0):
@@ -111,10 +114,10 @@ class Backend:
                 return False
         return True
             
-    def first_slot_free(self,nop):
-        if nop.port in self.last_ts:
-            slot = (self.last_ts[nop.port]
-                    + self.throughputs[nop.port])
+    def first_slot_free(self,port):
+        if port in self.last_ts:
+            slot = (self.last_ts[port]
+                    + self.throughputs[port])
         else:
             slot = 0
         return slot
@@ -180,7 +183,6 @@ class CPU:
         flag = False
         
         for nop in stream:
-            self.renamer.map(nop)
             # Retire the oldest muop
             if self.rob.full():
                 oop = self.rob.head()
@@ -189,8 +191,9 @@ class CPU:
                 offset = max(noffset,offset)
                 self.rob.rotate()
             # Insert a new muop
+            self.renamer.randomly_map(nop)
             self.rob.insert(nop)
-            nop.timestamp = max(self.backend.first_slot_free(nop),
+            nop.timestamp = max(self.backend.first_slot_free(nop.port),
                                 offset)
             # Out if stop conditions are met
             flag = (self.backend.is_stalling(nop) and
