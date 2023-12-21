@@ -8,8 +8,18 @@ stream_size = 8
 rob_size = 3
 default_throughput = 1.0
 # Execution parameters
-niters=100
+niters=1000
+# Search parameters
 stop_after_results = 10
+search_many=False
+search_unrolled= False
+
+
+# Checks
+assert(len(ports) > 0)
+assert(max_ports_per_op > 0)
+assert(len(ports) > max_ports_per_op)
+
 
 def __main__():
 
@@ -34,36 +44,57 @@ def __main__():
         )
         
         stream = [factory.build() for x in range(stream_size)]
-        flag = cpu.simulate(
+        cpu.simulate(
             stream,
             iterations=niters,
-            search_all=False,
-            find_everywhere=False,
-            stop_if_flag=False
+            search=True,
+            search_many=search_many,
+            search_unrolled=search_unrolled
         )
         
         if cpu.found:
 
             nom_str_of_stream = cpu.rob.str_of_history(length=len(stream))
             nom_str_of_report = cpu.backend.report()
-            m = cpu.rob.tail()
+            m = cpu.found[0]
+            lts = cpu.backend.last_ts
             
-            # stream2 = [m.clone() for m in cpu.rob.history[:len(stream)]]
-            stream2 = [m.clone() for m in stream]
-            backend.accelerate(m.port)
-            cpu.simulate(stream2,iterations=niters)
-            backend.slowdown(m.port)
+            stream2 = [oop.clone() for oop in stream]
+            cpu.simulate_sensitive(
+                stream=stream2,
+                port=m.port,
+                iterations=niters,
+                search=False
+            )
             
             # acc_str_of_history = cpu.rob.str_of_history()
-            m2 = cpu.rob.tail()
+            lts2 = cpu.backend.last_ts
 
-            if m.timestamp == m2.timestamp:
-                nresults += 1
+            if lts == lts2:
+
                 print("Report\n")
+                print(f"Total of {cpu.backend.last_ts} cycles\n")
                 print(f"{nom_str_of_stream}")
-                # print(f"> {nom_short_str_of_history}")
                 print(f"{nom_str_of_report}")
-                # print(f"Acc.: {acc_str_of_history}")
+                print("Sensitivity")
+                
+                for p in ports:
+                    if p == m.port:
+                        lts3 = lts2
+                    else:
+                        stream3 = [oop.clone() for oop in stream]
+                        cpu.simulate_sensitive(
+                            stream=stream3,
+                            port=p,
+                            iterations=niters,
+                            search=False
+                        )
+                        lts3 = cpu.backend.last_ts
+                    lts_sens = '%.2f' % (((lts - lts3)/lts)*100)
+                    print(f"{p}: {lts_sens}%")
+
                 print()
+                
+                nresults += 1
 
 __main__()

@@ -100,7 +100,7 @@ class Backend:
             self.throughputs[c] = default_throughput
 
     def clear(self):
-        self.last_ts = 0
+        self.last_ts = 0.0
         self.prev_ts = {}
         self.card_ports = {}
         self.stalls = {}
@@ -151,7 +151,7 @@ class Backend:
     
     def report(self,vertical=True):
         sep = "\n" if vertical else "  "
-        rep = f"Total of {self.last_ts} cycles\n"
+        rep = "Saturation\n"
         for p in self.stalls:
             sat = '%.2f' % self.saturation(p)
             pstalls = str(self.stalls[p])
@@ -215,13 +215,32 @@ class CPU:
 
     # Algo
 
+    def simulate_sensitive(
+            self,
+            stream,
+            port,
+            iterations=1,
+            search=False,
+            search_many=False,
+            search_unrolled=False,
+    ):
+        self.backend.accelerate(port)
+        self.simulate(
+            stream=stream,
+            iterations=iterations,
+            search=search,
+            search_many=search_many,
+            search_unrolled=search_unrolled
+        )
+        self.backend.slowdown(port)
+    
     def simulate(
             self,
             stream,
             iterations=1,
-            search_all=False,
-            find_everywhere=False,
-            stop_if_flag=False
+            search=False,
+            search_many=False,
+            search_unrolled=False,
     ):
 
         self.clear()
@@ -247,14 +266,18 @@ class CPU:
                 self.backend.issue(nop)
                 # Out if stop conditions are met
                 if (
-                        (search_all or len(self.found) == 0) and
-                        (find_everywhere or counter < len(stream)) and
-                        self.backend.stalling[nop.port] and
-                        self.backend.is_majority(nop.port)
+                        search and
+                        (search_many or len(self.found) == 0) and
+                        (search_unrolled or counter < len(stream)) and
+                        self.is_muop_of_interest(nop)
                 ):
                     self.found.append(nop)
                     nop.flag = True
-                    if stop_if_flag:
-                        break
                     
                 counter += 1
+
+    def is_muop_of_interest(self,nop):
+        return (
+            self.backend.stalling[nop.port] and
+            self.backend.is_majority(nop.port)
+        )
