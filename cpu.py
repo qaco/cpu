@@ -2,12 +2,13 @@ from random import randrange,sample,choice
 
 class Muop:
 
-    def __init__(self,name,ports,deps):
+    def __init__(self,name,ports,deps=[]):
         self.name = name
         self.ports = ports
         self.port = None
         self.deps = deps
         self.timestamp = None
+        self.flag = False
 
     def clone(self):
         m = Muop(
@@ -16,20 +17,37 @@ class Muop:
             deps=self.deps
         )
         return m
-        
-    def __str__(self):
+
+    def to_string(self,all_ports=True,mapped_ports=True,timestamp=True):
+
         res = self.name
-        res += "["
-        if self.ports:
+
+        if self.flag:
+            res = "*" + res + "*"
+        else:
+            res = " " + res + " "
+
+        if all_ports or mapped_ports:
+            res += "["
+        
+        if all_ports:
             res += self.ports[0]
             for p in self.ports[1:]:
                 res += "|" + p
-        if self.port is not None:
+                
+        if mapped_ports and self.port is not None:
             res += " -> " + self.port
-        res += "]"
-        if self.timestamp is not None:
-            res += f"({self.timestamp})"
+
+        if all_ports or mapped_ports:
+            res += "]"
+            
+        if timestamp and self.timestamp is not None:
+            res += f" ({self.timestamp})"
+
         return res
+    
+    def __str__(self):
+        return self.to_string()
 
 class MuopFactory:
 
@@ -82,12 +100,15 @@ class Backend:
             self.throughputs[c] = default_throughput
 
     def clear(self):
+        self.last_ts = 0
         self.prev_ts = {}
         self.card_ports = {}
         self.stalls = {}
+        self.stalling = {}
         for c in self.throughputs:
             self.card_ports[c] = 0
             self.stalls[c] = 0
+            self.stalling[c] = False
 
     def accelerate(self,r):
         assert(r in self.throughputs)
@@ -98,17 +119,15 @@ class Backend:
         self.throughputs[r] = self.throughputs[r]*2
         
     def issue(self,nop):
-        prec = self.prev_ts[nop.port] if nop.port in self.prev_ts else 0.0
-        self.stalls[nop.port] += nop.timestamp - prec - self.throughputs[nop.port]
+        if nop.timestamp > 0.0:
+            prec = self.prev_ts[nop.port] if nop.port in self.prev_ts else 0.0
+            stall = nop.timestamp - prec - self.throughputs[nop.port]
+            self.stalling[nop.port] = stall > 0.0
+            self.stalls[nop.port] += stall
         self.prev_ts[nop.port] = nop.timestamp
+        if nop.timestamp >= self.last_ts:
+            self.last_ts = nop.timestamp + self.throughputs[nop.port]
         self.card_ports[nop.port] += 1
-
-    def is_stalling(self,nop):
-        if nop.port in self.prev_ts:
-            delay = nop.timestamp - self.prev_ts[nop.port]
-            return delay > self.throughputs[nop.port]
-        else:
-            False
 
     def is_majority(self,port):
         bound = self.card_ports[port]
@@ -124,7 +143,21 @@ class Backend:
         else:
             slot = 0
         return slot
-        
+
+    def saturation(self,port):
+        pstalls = self.stalls[port]
+        sat = 100 - (pstalls/self.last_ts)*100 if self.last_ts else 0.0
+        return sat
+    
+    def report(self,vertical=True):
+        sep = "\n" if vertical else "  "
+        rep = f"Total of {self.last_ts} cycles\n"
+        for p in self.stalls:
+            sat = '%.2f' % self.saturation(p)
+            pstalls = str(self.stalls[p])
+            rep += f"{p}:{sat}% ({pstalls} stalls)" + sep
+        return rep
+            
 class ROB:
 
     def __init__(self,size=4):
@@ -158,10 +191,13 @@ class ROB:
         self.buff.append(nop)
         self.history.append(nop)
 
-    def str_of_history(self):
+    def str_of_history(self,vertical=True,length=-1):
+        sep = "\n" if vertical else " // "
         res = ""
-        for m in self.history:
-            res += str(m) + " "
+        for i,m in enumerate(self.history):
+            res += str(m) + sep
+            if i+1 == length:
+                break
         return res
     
 class CPU:
@@ -173,38 +209,52 @@ class CPU:
         self.clear()
     
     def clear(self):
+        self.found = []
         self.rob.clear()
         self.backend.clear()
 
     # Algo
 
-    def simulate(self,stream,iterations,stop_if_flag):
+    def simulate(
+            self,
+            stream,
+            iterations=1,
+            search_all=False,
+            find_everywhere=False,
+            stop_if_flag=False
+    ):
 
         self.clear()
         
         offset = 0
-        flag = False
         
-        for nop in stream:
-            # Retire the oldest muop
-            if self.rob.full():
-                oop = self.rob.head()
-                noffset = (oop.timestamp
-                           + self.backend.throughputs[oop.port])
-                offset = max(noffset,offset)
-                self.rob.rotate()
-            # Insert a new muop
-            # self.renamer.randomly_map(nop)
-            self.renamer.map(nop,self.backend)
-            self.rob.insert(nop)
-            nop.timestamp = max(self.backend.first_slot_free(nop.port),
-                                offset)
-            # Out if stop conditions are met
-            flag = (self.backend.is_stalling(nop) and
-                    self.backend.is_majority(nop.port))
-            if flag and stop_if_flag:
-                break
-            # Post-processing
-            self.backend.issue(nop)
-
-        return flag
+        counter = 0
+        for i in range(0,iterations):
+            for nop in stream:
+                nop = nop.clone()
+                # Retire the oldest muop
+                if self.rob.full():
+                    oop = self.rob.head()
+                    noffset = (oop.timestamp
+                               + self.backend.throughputs[oop.port])
+                    offset = max(noffset,offset)
+                    self.rob.rotate()
+                # Insert a new muop
+                self.renamer.map(nop,self.backend)
+                self.rob.insert(nop)
+                nop.timestamp = max(self.backend.first_slot_free(nop.port),
+                                    offset)
+                self.backend.issue(nop)
+                # Out if stop conditions are met
+                if (
+                        (search_all or len(self.found) == 0) and
+                        (find_everywhere or counter < len(stream)) and
+                        self.backend.stalling[nop.port] and
+                        self.backend.is_majority(nop.port)
+                ):
+                    self.found.append(nop)
+                    nop.flag = True
+                    if stop_if_flag:
+                        break
+                    
+                counter += 1

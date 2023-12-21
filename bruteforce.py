@@ -1,15 +1,17 @@
 from cpu import Backend, ROB, CPU, MuopFactory, Renamer
 
-def __main__():
+# Input parameters
+ports = ["r0","r1","r2","r3"]
+max_ports_per_op = 2
+stream_size = 8
+# Architectural parameters
+rob_size = 3
+default_throughput = 1.0
+# Execution parameters
+niters=100
+stop_after_results = 10
 
-    # Params
-    
-    ports = ["r0","r1","r2","r3"]
-    rob_size = 3
-    stream_size = 8
-    niters=1
-    default_throughput = 1.0
-    max_ports_per_op = 2
+def __main__():
 
     # Construction
 
@@ -22,8 +24,9 @@ def __main__():
     cpu = CPU(backend=backend,rob=rob,renamer=renamer)
 
     # Computation
-    
-    while True:
+
+    nresults = 0
+    while nresults < stop_after_results:
 
         factory = MuopFactory(
             ports=ports,
@@ -31,23 +34,36 @@ def __main__():
         )
         
         stream = [factory.build() for x in range(stream_size)]
-        found = cpu.simulate(stream,iterations=niters,stop_if_flag=True)
+        flag = cpu.simulate(
+            stream,
+            iterations=niters,
+            search_all=False,
+            find_everywhere=False,
+            stop_if_flag=False
+        )
         
-        if found:
+        if cpu.found:
 
-            nom_str_of_history = cpu.rob.str_of_history()
+            nom_str_of_stream = cpu.rob.str_of_history(length=len(stream))
+            nom_str_of_report = cpu.backend.report()
             m = cpu.rob.tail()
             
-            stream2 = [m.clone() for m in cpu.rob.history]
+            # stream2 = [m.clone() for m in cpu.rob.history[:len(stream)]]
+            stream2 = [m.clone() for m in stream]
             backend.accelerate(m.port)
-            cpu.simulate(stream2,iterations=niters,stop_if_flag=False)
+            cpu.simulate(stream2,iterations=niters)
             backend.slowdown(m.port)
             
-            acc_str_of_history = cpu.rob.str_of_history()
+            # acc_str_of_history = cpu.rob.str_of_history()
             m2 = cpu.rob.tail()
 
             if m.timestamp == m2.timestamp:
-                print(f"Nom.: {nom_str_of_history}")
-                print(f"Acc.: {acc_str_of_history}\n")
+                nresults += 1
+                print("Report\n")
+                print(f"{nom_str_of_stream}")
+                # print(f"> {nom_short_str_of_history}")
+                print(f"{nom_str_of_report}")
+                # print(f"Acc.: {acc_str_of_history}")
+                print()
 
 __main__()
