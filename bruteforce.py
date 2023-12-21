@@ -1,7 +1,7 @@
 from cpu import Backend, ROB, CPU, MuopFactory, Renamer
 
 # Input parameters
-ports = ["r0","r1","r2","r3"]
+ports = ["p0","p1","p2"]
 max_ports_per_op = 2
 stream_size = 8
 # Architectural parameters
@@ -56,18 +56,17 @@ def __main__():
 
             nom_str_of_stream = cpu.rob.str_of_history(length=len(stream))
             nom_str_of_report = cpu.backend.report()
-            m = cpu.found[0]
             lts = cpu.backend.last_ts
-            
-            stream2 = [oop.clone() for oop in stream]
+
+            # Verification: we dump it if m.port (on which stalling occured)
+            # is bottleneck
+            m = cpu.found[0]
             cpu.simulate_sensitive(
-                stream=stream2,
+                stream=[oop.clone() for oop in stream],
                 port=m.port,
                 iterations=niters,
                 search=False
             )
-            
-            # acc_str_of_history = cpu.rob.str_of_history()
             lts2 = cpu.backend.last_ts
 
             if lts == lts2:
@@ -82,9 +81,8 @@ def __main__():
                     if p == m.port:
                         lts3 = lts2
                     else:
-                        stream3 = [oop.clone() for oop in stream]
                         cpu.simulate_sensitive(
-                            stream=stream3,
+                            stream=[oop.clone() for oop in stream],
                             port=p,
                             iterations=niters,
                             search=False
