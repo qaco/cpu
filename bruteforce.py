@@ -7,6 +7,7 @@ def __main__():
     ports = ["r0","r1","r2","r3"]
     rob_size = 3
     stream_size = 8
+    niters=1
     default_throughput = 1.0
     max_ports_per_op = 2
 
@@ -16,7 +17,7 @@ def __main__():
         ports=ports,
         default_throughput=default_throughput
     )
-    renamer = Renamer(backend=backend)
+    renamer = Renamer()
     rob = ROB(size=rob_size)
     cpu = CPU(backend=backend,rob=rob,renamer=renamer)
 
@@ -30,7 +31,7 @@ def __main__():
         )
         
         stream = [factory.build() for x in range(stream_size)]
-        found = cpu.simulate(stream, stop_if_flag=True)
+        found = cpu.simulate(stream,iterations=niters,stop_if_flag=True)
         
         if found:
 
@@ -39,7 +40,7 @@ def __main__():
             
             stream2 = [m.clone() for m in cpu.rob.history]
             backend.accelerate(m.port)
-            cpu.simulate(stream2,stop_if_flag=False)
+            cpu.simulate(stream2,iterations=niters,stop_if_flag=False)
             backend.slowdown(m.port)
             
             acc_str_of_history = cpu.rob.str_of_history()

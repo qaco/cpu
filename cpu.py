@@ -20,14 +20,12 @@ class Muop:
     def __str__(self):
         res = self.name
         res += "["
-        if self.port is not None:
-            res += self.port
-        elif self.ports:
+        if self.ports:
             res += self.ports[0]
             for p in self.ports[1:]:
                 res += "|" + p
-        else:
-            assert(False)
+        if self.port is not None:
+            res += " -> " + self.port
         res += "]"
         if self.timestamp is not None:
             res += f"({self.timestamp})"
@@ -43,7 +41,7 @@ class MuopFactory:
         self.stamp = 0
 
     def dice(self):
-        nports = randrange(1,self.max_ports_per_op)
+        nports = randrange(1,self.max_ports_per_op + 1)
         disjunction = sample(self.ports,nports)
         return disjunction
 
@@ -66,14 +64,15 @@ class MuopFactory:
 
 class Renamer:
 
-    def __init__(self,backend):
-        self.backend = backend
-    
     def randomly_map(self,nop):
         nop.port = choice(nop.ports)
 
-    def map(self,nop):
-        assert(False)
+    def map(self,nop,backend):
+        slots = {}
+        for p in nop.ports:
+            slots[p] = backend.first_slot_free(p)
+        free_port = min(slots, key=slots.get)
+        nop.port = free_port
         
 class Backend:
 
@@ -83,10 +82,12 @@ class Backend:
             self.throughputs[c] = default_throughput
 
     def clear(self):
-        self.last_ts = {}
+        self.prev_ts = {}
         self.card_ports = {}
+        self.stalls = {}
         for c in self.throughputs:
             self.card_ports[c] = 0
+            self.stalls[c] = 0
 
     def accelerate(self,r):
         assert(r in self.throughputs)
@@ -97,12 +98,14 @@ class Backend:
         self.throughputs[r] = self.throughputs[r]*2
         
     def issue(self,nop):
-        self.last_ts[nop.port] = nop.timestamp
+        prec = self.prev_ts[nop.port] if nop.port in self.prev_ts else 0.0
+        self.stalls[nop.port] += nop.timestamp - prec - self.throughputs[nop.port]
+        self.prev_ts[nop.port] = nop.timestamp
         self.card_ports[nop.port] += 1
 
     def is_stalling(self,nop):
-        if nop.port in self.last_ts:
-            delay = nop.timestamp - self.last_ts[nop.port]
+        if nop.port in self.prev_ts:
+            delay = nop.timestamp - self.prev_ts[nop.port]
             return delay > self.throughputs[nop.port]
         else:
             False
@@ -115,8 +118,8 @@ class Backend:
         return True
             
     def first_slot_free(self,port):
-        if port in self.last_ts:
-            slot = (self.last_ts[port]
+        if port in self.prev_ts:
+            slot = (self.prev_ts[port]
                     + self.throughputs[port])
         else:
             slot = 0
@@ -175,7 +178,7 @@ class CPU:
 
     # Algo
 
-    def simulate(self,stream,stop_if_flag):
+    def simulate(self,stream,iterations,stop_if_flag):
 
         self.clear()
         
@@ -191,7 +194,8 @@ class CPU:
                 offset = max(noffset,offset)
                 self.rob.rotate()
             # Insert a new muop
-            self.renamer.randomly_map(nop)
+            # self.renamer.randomly_map(nop)
+            self.renamer.map(nop,self.backend)
             self.rob.insert(nop)
             nop.timestamp = max(self.backend.first_slot_free(nop.port),
                                 offset)
