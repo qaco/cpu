@@ -56,10 +56,18 @@ def __main__():
         
         if cpu.found:
 
-            str_of_stream = " ".join([mu.to_string(False,False,False)
-                                      for mu in stream])
+            strs_of_stream = []
+            for mu in stream:
+                str_of_mu = mu.to_string(
+                    all_ports=False,
+                    mapped_ports=False,
+                    timestamp=False,
+                    decorate=False
+                )
+                strs_of_stream.append(str_of_mu)
+            str_of_stream = " ".join(strs_of_stream)
             str_of_history = cpu.rob.str_of_history(length=len(stream))
-            str_of_saturation = cpu.backend.report()
+            str_of_saturation = str(cpu.backend)
 
             # Verification: we dump it if m.port (on which stalling occured)
             # is bottleneck
@@ -75,10 +83,11 @@ def __main__():
             if lts != lts2:
                 continue
             
-            print(f"Report: {str_of_stream}\n")
+            print(f"===\nReport: {str_of_stream}\n")
             print(f"For {niters} iterations: {cpu.backend.last_ts} cycles\n")
-            print(f"{str_of_history}...\n")
+            print(f"Portmapping & timing\n{str_of_history}...\n")
             print(f"Saturation\n{str_of_saturation}")
+            
             print("Sensitivity")
                 
             for p in ports:
@@ -92,8 +101,9 @@ def __main__():
                         search=False
                     )
                     lts3 = cpu.backend.last_ts
-                lts_sens = '%.2f' % (((lts - lts3)/lts)*100)
-                print(f"{p}: {lts_sens}%")
+                speedup = lts - lts3
+                speedup_percent = '%.2f' % ((speedup/lts)*100)
+                print(f"{p}: {speedup_percent}% ({speedup} cycles)")
 
             print()
                 

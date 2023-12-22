@@ -20,14 +20,18 @@ class Muop:
         )
         return m
 
-    def to_string(self,all_ports=True,mapped_ports=True,timestamp=True):
+    def to_string(
+            self,
+            all_ports=True,
+            mapped_ports=True,
+            timestamp=True,
+            decorate=True
+    ):
 
         res = self.name
 
-        if self.flag:
-            res = "*" + res + "*"
-        else:
-            res = " " + res + " "
+        if decorate:
+            res = f"*{res}*" if self.flag else f" {res} "
 
         if all_ports or mapped_ports:
             res += "["
@@ -154,7 +158,10 @@ class Backend:
             pstalls = str(self.stalls[p])
             rep += f"{p}:{sat}% ({pstalls} stalls)" + sep
         return rep
-            
+
+    def __str__(self):
+        return self.report()
+    
 class ROB:
 
     def __init__(self,size=4):
