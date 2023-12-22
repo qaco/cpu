@@ -10,11 +10,13 @@ class Muop:
         self.timestamp = None
         self.flag = False
 
-    def clone(self):
+    def clone(self,deps=None):
+        if deps == None:
+            deps = self.deps
         m = Muop(
             name=self.name,
             ports=self.ports,
-            deps=self.deps
+            deps=deps
         )
         return m
 
@@ -51,12 +53,14 @@ class Muop:
 
 class MuopFactory:
 
-    def __init__(self,ports,max_ports_per_op):
+    def __init__(self,ports,max_ports_per_op,num_different_ops):
         assert(max_ports_per_op > 1 and len(ports) >= max_ports_per_op)
         self.ports = ports
         self.max_ports_per_op = max_ports_per_op
+        self.num_different_ops = num_different_ops
+        self.muops = [Muop(name=f"u{i}",ports=self.dice())
+                      for i in range(self.num_different_ops)]
         self.history = []
-        self.stamp = 0
 
     def dice(self):
         nports = randrange(1,self.max_ports_per_op + 1)
@@ -64,19 +68,12 @@ class MuopFactory:
         return disjunction
 
     def build(self,max_deps=0):
-        assert(self.ports)
-        
         if self.history:
             ndeps = randrange(0,max_deps + 1)
         else:
             ndeps = 0
         deps = [choice(self.history) for i in range(ndeps)]
-        muop = Muop(
-            name=f"u{self.stamp}",
-            ports=self.dice(),
-            deps=deps
-        )
-        self.stamp += 1
+        muop = choice(self.muops).clone(deps=deps)
         self.history.append(muop)
         return muop
 
@@ -151,7 +148,7 @@ class Backend:
     
     def report(self,vertical=True):
         sep = "\n" if vertical else "  "
-        rep = "Saturation\n"
+        rep = ""
         for p in self.stalls:
             sat = '%.2f' % self.saturation(p)
             pstalls = str(self.stalls[p])

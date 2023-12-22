@@ -1,19 +1,20 @@
 from cpu import Backend, ROB, CPU, MuopFactory, Renamer
 
-# Input parameters
-ports = ["p0","p1","p2"]
-max_ports_per_op = 2
-stream_size = 8
 # Architectural parameters
 rob_size = 3
 default_throughput = 1.0
+ports = ["p0","p1","p2"]
+# Muops parameters
+max_ports_per_op = 2
+num_different_ops = 5
+stream_size = 8
 # Execution parameters
 niters=1000
 # Search parameters
 stop_after_results = 10
+search=True
 search_many=False
 search_unrolled= False
-
 
 # Checks
 assert(len(ports) > 0)
@@ -40,26 +41,29 @@ def __main__():
 
         factory = MuopFactory(
             ports=ports,
-            max_ports_per_op=max_ports_per_op
+            max_ports_per_op=max_ports_per_op,
+            num_different_ops=num_different_ops
         )
         
         stream = [factory.build() for x in range(stream_size)]
         cpu.simulate(
             stream,
             iterations=niters,
-            search=True,
+            search=search,
             search_many=search_many,
             search_unrolled=search_unrolled
         )
         
         if cpu.found:
 
-            nom_str_of_stream = cpu.rob.str_of_history(length=len(stream))
-            nom_str_of_report = cpu.backend.report()
-            lts = cpu.backend.last_ts
+            str_of_stream = " ".join([mu.to_string(False,False,False)
+                                      for mu in stream])
+            str_of_history = cpu.rob.str_of_history(length=len(stream))
+            str_of_saturation = cpu.backend.report()
 
             # Verification: we dump it if m.port (on which stalling occured)
             # is bottleneck
+            lts = cpu.backend.last_ts
             m = cpu.found[0]
             cpu.simulate_sensitive(
                 stream=[oop.clone() for oop in stream],
@@ -68,31 +72,31 @@ def __main__():
                 search=False
             )
             lts2 = cpu.backend.last_ts
-
-            if lts == lts2:
-
-                print("Report\n")
-                print(f"Total of {cpu.backend.last_ts} cycles\n")
-                print(f"{nom_str_of_stream}")
-                print(f"{nom_str_of_report}")
-                print("Sensitivity")
+            if lts != lts2:
+                continue
+            
+            print(f"Report: {str_of_stream}\n")
+            print(f"For {niters} iterations: {cpu.backend.last_ts} cycles\n")
+            print(f"{str_of_history}...\n")
+            print(f"Saturation\n{str_of_saturation}")
+            print("Sensitivity")
                 
-                for p in ports:
-                    if p == m.port:
-                        lts3 = lts2
-                    else:
-                        cpu.simulate_sensitive(
-                            stream=[oop.clone() for oop in stream],
-                            port=p,
-                            iterations=niters,
-                            search=False
-                        )
-                        lts3 = cpu.backend.last_ts
-                    lts_sens = '%.2f' % (((lts - lts3)/lts)*100)
-                    print(f"{p}: {lts_sens}%")
+            for p in ports:
+                if p == m.port:
+                    lts3 = lts2
+                else:
+                    cpu.simulate_sensitive(
+                        stream=[oop.clone() for oop in stream],
+                        port=p,
+                        iterations=niters,
+                        search=False
+                    )
+                    lts3 = cpu.backend.last_ts
+                lts_sens = '%.2f' % (((lts - lts3)/lts)*100)
+                print(f"{p}: {lts_sens}%")
 
-                print()
+            print()
                 
-                nresults += 1
+            nresults += 1
 
 __main__()
