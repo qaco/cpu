@@ -83,7 +83,7 @@ def __main__():
             if lts != lts2:
                 continue
             
-            print(f"===\nReport: {str_of_stream}\n")
+            print(f"===\nProgram: {str_of_stream}\n")
             print(f"For {niters} iterations: {cpu.backend.last_ts} cycles\n")
             print(f"Portmapping & timing\n{str_of_history}...\n")
             print(f"Saturation\n{str_of_saturation}")
