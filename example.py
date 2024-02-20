@@ -1,4 +1,5 @@
-from cpu import Backend, ROB, CPU, Muop, Renamer
+from cpu import Backend, ROB, CPU, Renamer
+from muop import Muop
 
 def __main__():
 
@@ -30,7 +31,7 @@ def __main__():
         Muop(name="u8",ports=["p1"]),
     ]
 
-    cpu.simulate(stream,iterations=niters,stop_if_flag=False)
+    cpu.simulate(stream,iterations=niters)
     nom_str_of_history = cpu.rob.str_of_history(length=len(stream),vertical=True)
     nom_str_of_report = cpu.backend.report()
     print(nom_str_of_history)

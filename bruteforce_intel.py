@@ -1,33 +1,27 @@
 from cpu import Backend, ROB, CPU, Renamer
-from muop import MuopToyFactory
+from muop import MuopFileFactory
 
 # Architectural parameters
-rob_size = 3
+rob_size = 4
 default_throughput = 1.0
-ports = ["p0","p1","p2"]
 # Muops parameters
-max_ports_per_op = 2
-num_different_ops = 5
-stream_size = 9
+stream_size = 12
 # Execution parameters
 niters=1000
 # Search parameters
 search=True
 search_many=False
 search_unrolled= False
-
-# Checks
-assert(len(ports) > 0)
-assert(max_ports_per_op > 0)
-assert(len(ports) > max_ports_per_op)
-
+floor_sens=5.0
 
 def __main__():
 
     # Construction
 
+    factory = MuopFileFactory(filename='instructions.xml')
+    
     backend = Backend(
-        ports=ports,
+        ports=factory.ports,
         default_throughput=default_throughput
     )
     renamer = Renamer()
@@ -37,12 +31,6 @@ def __main__():
     # Computation
 
     while True:
-
-        factory = MuopToyFactory(
-            ports=ports,
-            max_ports_per_op=max_ports_per_op,
-            num_different_ops=num_different_ops
-        )
         
         stream = [factory.build() for x in range(stream_size)]
         cpu.simulate(
@@ -54,6 +42,10 @@ def __main__():
         )
         
         if cpu.found:
+
+            nominal_sats = {}
+            for p in factory.ports:
+                nominal_sats[p] = cpu.backend.saturation(p)
 
             strs_of_stream = []
             for mu in stream:
@@ -82,14 +74,10 @@ def __main__():
             if lts != lts2:
                 continue
             
-            print(f"===\nProgram: {str_of_stream}\n")
-            print(f"For {niters} iterations: {cpu.backend.last_ts} cycles\n")
-            print(f"Portmapping & timing\n{str_of_history}...\n")
-            print(f"Saturation\n{str_of_saturation}")
             
-            print("Sensitivity")
-                
-            for p in ports:
+            relevant = False
+            str_of_sens = ""
+            for p in factory.ports:
                 if p == m.port:
                     lts3 = lts2
                 else:
@@ -101,13 +89,31 @@ def __main__():
                     )
                     lts3 = cpu.backend.last_ts
                 speedup = lts - lts3
-                speedup_percent = '%.2f' % ((speedup/lts)*100)
-                print(f"{p}: {speedup_percent}% ({speedup} cycles)")
-
-            print()
+                speedup_percent = (speedup/lts)*100
+                speedup_percent_str = '%.2f' % speedup_percent
+                sat = nominal_sats[p]
                 
+                sens= f"{p}: {speedup_percent_str}% ({speedup} cycles)"
+                str_of_sens += f"{sens}\n"
+
+                relevant = (
+                    relevant
+                    or (speedup_percent > floor_sens and sat < 95.0)
+                )
+
+            if not relevant:
+                continue
+            else:
+                relevant = False
+
+            print(f"===\nProgram: {str_of_stream}\n")
+            print(f"For {niters} iterations: {lts2} cycles\n")
+            print(f"Portmapping & timing\n{str_of_history}...\n")
+            print(f"Saturation\n{str_of_saturation}")
+            print(f"Sensitivity\n{str_of_sens}")
+
             ncont = "x"
-            while (ncont != "y" and ncont != "n"):
+            while (ncont != "y" and ncont != "n" and ncont != ""):
                 ncont = input("Continue ? [y/n]")
             if ncont == "n":
                 break
